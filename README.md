@@ -1,6 +1,6 @@
 # AI Travel Assistant
 
-A RAG-based travel assistant. Upload travel guide PDFs, then ask for itineraries, hotels, food and activities. Answers are built only from passages retrieved from your own guides, in the language you choose from the sidebar. The chat model is **Llama 3.3 70B served by Groq**.
+A RAG-based travel assistant. Upload travel guide PDFs, then ask for itineraries, hotels, food and activities. Answers are built only from passages retrieved from your own guides, in the language you choose from the sidebar. The chat model is **a model served by Groq (`openai/gpt-oss-120b` by default)**.
 
 ## Features
 
@@ -9,7 +9,7 @@ A RAG-based travel assistant. Upload travel guide PDFs, then ask for itineraries
 - **Follow-up questions.** Vague questions such as "what about food there?" are rewritten into standalone queries using the chat history.
 - **Reply language from the sidebar.** The dropdown decides the language of the answer. Non-English questions are translated to English for searching.
 - **Spelling and name cleanup.** Typos are corrected and variants such as "srilanka" are normalised before searching.
-- **Switchable LLM.** Groq Llama by default; set `MODEL_PROVIDER=openai` to use OpenAI instead.
+- **Switchable LLM.** Groq by default; set `MODEL_PROVIDER=openai` to use OpenAI instead.
 
 ## How it works
 
@@ -18,16 +18,16 @@ Upload    PDF -> PyMuPDF (text per page) -> split (500 chars, 100 overlap)
               -> OpenAI embeddings -> Qdrant
 
 Question  text -> translate to English if needed
-               -> spell-correct (Llama)
-               -> rewrite vague follow-ups (Llama)
+               -> spell-correct (the model)
+               -> rewrite vague follow-ups (the model)
                -> normalise place names -> embed -> Qdrant top 10
                -> keep strong matches
-               -> strict document prompt -> Llama 3.3 70B (Groq) -> answer
+               -> strict document prompt -> the model 3.3 70B (Groq) -> answer
 ```
 
 A chunk is kept only if the best match scores at least 0.70 and the chunk scores at least 85 percent of the best score (never below 0.70). If nothing passes, or the model replies `NO_PDF_CONTEXT`, no answer is generated and the UI offers the general-knowledge option.
 
-## Where Llama on Groq is used
+## Where the Groq model is used
 
 All model calls go through one place, `build_llm()` in `src/generator.py`:
 
@@ -46,7 +46,7 @@ Groq has no embeddings API, so embeddings still use OpenAI `text-embedding-ada-0
 | Backend | FastAPI, Uvicorn |
 | Vector database | Qdrant (cosine distance, 1536 dimensions) |
 | Embeddings | OpenAI `text-embedding-ada-002` |
-| Chat model | Llama 3.3 70B Versatile on Groq (`langchain-groq`) |
+| Chat model | `openai/gpt-oss-120b` on Groq (`langchain-groq`) |
 | Orchestration | LangChain (prompts, conversation memory) |
 | PDF parsing | PyMuPDF |
 
@@ -96,7 +96,7 @@ cp .env.example .env
 | Variable | Required | Description |
 | --- | --- | --- |
 | `GROQ_API_KEY` | Yes (Groq mode) | Groq API key |
-| `GROQ_MODEL` | No | Default `llama-3.3-70b-versatile` |
+| `GROQ_MODEL` | No | Default `openai/gpt-oss-120b`. Any chat model your Groq key can use |
 | `MODEL_PROVIDER` | No | `groq` (default) or `openai` |
 | `OPENAI_API_KEY` | Yes | Used for embeddings (and chat if `MODEL_PROVIDER=openai`) |
 | `OPENAI_CHAT_MODEL` | No | Default `gpt-3.5-turbo`, used only in OpenAI mode |
@@ -169,6 +169,7 @@ Free-plan notes: the service sleeps after about 15 minutes idle and the first re
 
 ## Notes and limits
 
+- Groq retired `llama-3.3-70b-versatile` and `llama-3.1-8b-instant` for free and developer accounts on 16 August 2026. If you see a `model_not_found` error, set `GROQ_MODEL` to a model listed at console.groq.com/docs/models.
 - Chat memory is held in the server's RAM and is lost on restart.
 - Scanned PDFs without a text layer produce no text; OCR is not included.
 - Groq's free tier has rate limits. If you hit one, wait a moment or switch `MODEL_PROVIDER=openai`.
