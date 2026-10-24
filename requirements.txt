@@ -6,6 +6,7 @@ qdrant-client
 langchain
 langchain-core
 langchain-openai
+langchain-groq
 langchain-community
 langchain-text-splitters
 openai
