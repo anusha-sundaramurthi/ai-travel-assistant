@@ -4,20 +4,33 @@ from langchain_core.prompts import (
     HumanMessagePromptTemplate,
     SystemMessagePromptTemplate,
 )
-from langchain_openai import ChatOpenAI
-
 from src.retriever import retrieve_docs
-from src.config import MODEL_PROVIDER, OPENAI_API_KEY
+from src.config import (
+    MODEL_PROVIDER, OPENAI_API_KEY, OPENAI_CHAT_MODEL,
+    GROQ_API_KEY, GROQ_MODEL,
+)
 
-# ── 1. Build the LLM ─────────────────────────────────────
-if MODEL_PROVIDER == "openai":
-    llm = ChatOpenAI(
-        api_key=OPENAI_API_KEY,
-        model_name="gpt-3.5-turbo",
-        temperature=0.7
-    )
-else:
+
+# ── 1. Build the LLM (Groq Llama by default, OpenAI optional) ─
+def build_llm(temperature: float):
+    if MODEL_PROVIDER == "groq":
+        from langchain_groq import ChatGroq
+        return ChatGroq(
+            api_key=GROQ_API_KEY,
+            model=GROQ_MODEL,            # llama-3.3-70b-versatile
+            temperature=temperature,
+        )
+    if MODEL_PROVIDER == "openai":
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            api_key=OPENAI_API_KEY,
+            model_name=OPENAI_CHAT_MODEL,
+            temperature=temperature,
+        )
     raise ValueError(f"Unknown MODEL_PROVIDER: {MODEL_PROVIDER}")
+
+
+llm = build_llm(temperature=0.7)   # answers
 
 # ── 2. Per-session memory store ───────────────────────────
 _memory_store: dict[str, ConversationBufferMemory] = {}
@@ -68,10 +81,7 @@ rewrite_prompt = ChatPromptTemplate.from_messages([
     HumanMessagePromptTemplate.from_template(REWRITE_HUMAN_PROMPT)
 ])
 
-if MODEL_PROVIDER == "openai":
-    rewrite_llm = ChatOpenAI(api_key=OPENAI_API_KEY, model_name="gpt-3.5-turbo", temperature=0)
-else:
-    rewrite_llm = llm
+rewrite_llm = build_llm(temperature=0)   # deterministic rewriting
 
 def rewrite_query(raw_query: str, chat_history_text: str) -> str:
     if not chat_history_text.strip():
@@ -90,7 +100,7 @@ def rewrite_query(raw_query: str, chat_history_text: str) -> str:
         question=raw_query
     )
     result    = rewrite_llm.invoke(formatted)
-    rewritten = result.content.strip() if MODEL_PROVIDER == "openai" else str(result).strip()
+    rewritten = result.content.strip()
     print(f"[QueryRewriter] Result: '{rewritten}'")
     return rewritten
 
@@ -325,7 +335,7 @@ def generate_answer(
             question=original_query
         )
         result = llm.invoke(formatted)
-        answer = result.content.strip() if MODEL_PROVIDER == "openai" else str(result).strip()
+        answer = result.content.strip()
         memory.save_context({"input": original_query}, {"answer": answer})
         return {
             "answer":          answer,
@@ -360,7 +370,7 @@ def generate_answer(
         question=original_query
     )
     result = llm.invoke(formatted)
-    answer = result.content.strip() if MODEL_PROVIDER == "openai" else str(result).strip()
+    answer = result.content.strip()
     if "NO_PDF_CONTEXT" in answer:
         print(f"[Generator] LLM detected irrelevant context → asking user")
         return {
