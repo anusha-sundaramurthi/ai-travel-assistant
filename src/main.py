@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile
+from fastapi import FastAPI, UploadFile, HTTPException
 from contextlib import asynccontextmanager
 from pydantic import BaseModel
 from src.ingest import ingest_pdf
@@ -25,12 +25,17 @@ class QueryRequest(BaseModel):
 
 @app.post("/ask")
 async def ask_question(req: QueryRequest):
-    result = generate_answer(
-        req.query,
-        session_id=req.session_id,
-        use_general=req.use_general,
-        language=req.language          # ← pass language to generator
-    )
+    try:
+        result = generate_answer(
+            req.query,
+            session_id=req.session_id,
+            use_general=req.use_general,
+            language=req.language          # ← pass language to generator
+        )
+    except Exception as e:
+        # Model / network / Qdrant failure: return a readable error, not a stack trace
+        print(f"[ask] failed: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=503, detail=f"{type(e).__name__}: {e}")
     return {
         "response":        result["answer"],
         "rewritten_query": result["rewritten_query"],
