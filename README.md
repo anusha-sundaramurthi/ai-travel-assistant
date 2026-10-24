@@ -56,6 +56,7 @@ Groq has no embeddings API, so embeddings still use OpenAI `text-embedding-ada-0
 ai-travel-assistant/
 ├── app.py              # Streamlit front end
 ├── requirements.txt
+├── start.sh            # Starts backend + front end in one service (Render)
 ├── .env.example        # Copy to .env and fill in
 └── src/
     ├── main.py         # FastAPI app and routes
@@ -150,6 +151,21 @@ curl -X POST http://localhost:8000/ask \
   -H "Content-Type: application/json" \
   -d '{"query": "Plan a 3-day trip to Sri Lanka", "session_id": "demo", "language": "English"}'
 ```
+
+## Deploy on Render (single service)
+
+`start.sh` runs FastAPI on `127.0.0.1:8000` (private) and Streamlit on Render's public port, so one service and one URL are enough. The backend is never exposed to the internet.
+
+1. Push the repo to GitHub (without `.env`).
+2. In Render choose **New → Web Service** and connect the repo.
+3. Set:
+   - Runtime: Python 3
+   - Build command: `pip install -r requirements.txt`
+   - Start command: `bash start.sh`
+4. Add environment variables: `GROQ_API_KEY`, `OPENAI_API_KEY`, `QDRANT_HOST`, `QDRANT_API_KEY`, `COLLECTION_NAME`, `MODEL_PROVIDER=groq`, `PYTHON_VERSION=3.11.9`. Do not set `FASTAPI_URL`; it defaults to the private backend.
+5. Deploy and open the service URL.
+
+Free-plan notes: the service sleeps after about 15 minutes idle and the first request takes 30 to 60 seconds, so open the URL a few minutes before a demo. Chat memory is lost on restart; uploaded PDFs stay in Qdrant.
 
 ## Notes and limits
 
