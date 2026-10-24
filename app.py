@@ -1,339 +1,365 @@
-import streamlit as st
-import requests
+import os
 import uuid
 
-import os
+import requests
+import streamlit as st
 from dotenv import load_dotenv
+
 load_dotenv()
 FASTAPI_URL = os.getenv("FASTAPI_URL", "http://localhost:8000")
 
 st.set_page_config(
     page_title="AI Travel Assistant",
     page_icon="🧭",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-st.title("🧭 AI Travel Itinerary Assistant")
-st.caption("Ask about any travel destination — powered by your uploaded guides.")
+# ══════════════════════════════════════════════════════════
+# Styling  (ocean / sand palette)
+# ══════════════════════════════════════════════════════════
+st.markdown(
+    """
+<style>
+:root {
+  --sky:#c8e6f5; --ocean:#0a6e9f; --deep:#04374f; --deeper:#021e2c;
+  --sand:#f2e9d8; --amber:#e8a040; --foam:#eaf6fb; --muted:#7fb0c6;
+  --line:#1a4a63;
+}
 
-# ── Session setup ─────────────────────────────────────────
-if "session_id" not in st.session_state:
-    st.session_state.session_id = str(uuid.uuid4())
+/* page */
+.stApp { background: radial-gradient(1200px 600px at 70% -10%, #06456a33, transparent), var(--deeper); }
+#MainMenu, footer, [data-testid="stToolbar"], [data-testid="stAppDeployButton"] { visibility: hidden; }
+header[data-testid="stHeader"] { background: transparent; }
+.block-container { padding-top: 1.6rem; max-width: 880px; }
 
-if "pending_general_query" not in st.session_state:
-    st.session_state.pending_general_query = None
+/* headings use a serif face */
+h1, h2, h3, .brand-title, .hero-title { font-family: Georgia, 'Times New Roman', serif !important; letter-spacing: .2px; }
 
-if "show_help" not in st.session_state:
-    st.session_state.show_help = False
+/* sidebar */
+section[data-testid="stSidebar"] { background: var(--deep); border-right: 1px solid var(--line); }
+section[data-testid="stSidebar"] .block-container { padding-top: 1.2rem; }
+.brand { display:flex; align-items:center; gap:.65rem; margin-bottom:.2rem; }
+.brand-mark { width:38px; height:38px; border-radius:11px; display:grid; place-items:center;
+  background: linear-gradient(145deg, var(--ocean), #0b4f73); font-size:20px; border:1px solid #2a7da6; }
+.brand-title { font-size:1.12rem; font-weight:700; color:var(--sand); line-height:1.1; }
+.brand-sub { font-size:.74rem; color:var(--muted); }
+.side-label { font-size:.7rem; text-transform:uppercase; letter-spacing:.12em; color:var(--muted);
+  margin:1.1rem 0 .35rem; font-weight:600; }
 
-# ── Sidebar (NO SCROLL — compact everything) ──────────────
-with st.sidebar:
+/* file uploader */
+[data-testid="stFileUploaderDropzone"] { background:#021e2c88; border:1.5px dashed #2a7da6; border-radius:12px; }
+[data-testid="stFileUploaderDropzone"]:hover { border-color: var(--amber); }
 
-    # ── 1. Upload ─────────────────────────────────────────
-    st.header("📁 Upload Guides")
-    uploaded_files = st.file_uploader(
-        "PDF only",
-        type="pdf",
-        accept_multiple_files=True,
-        label_visibility="collapsed"
-    )
-    if uploaded_files:
-        if st.button("Process Guides", use_container_width=True):
-            for uploaded_file in uploaded_files:
-                with st.spinner(f"Processing {uploaded_file.name}..."):
-                    try:
-                        files    = {"file": uploaded_file}
-                        response = requests.post(f"{FASTAPI_URL}/upload", files=files)
-                        if response.status_code == 200:
-                            st.success(f"✅ {uploaded_file.name}")
-                        else:
-                            st.error(f"❌ Failed: {uploaded_file.name}")
-                    except Exception as e:
-                        st.error(f"Upload error: {str(e)}")
+/* buttons */
+.stButton > button { border-radius:10px; border:1px solid var(--line); background:#021e2c99;
+  color:var(--sand); font-weight:500; transition:all .15s ease; }
+.stButton > button:hover { border-color:var(--amber); color:var(--amber); background:#021e2ccc; }
+.stButton > button[kind="primary"] { background:var(--amber); color:#2a1a00; border-color:var(--amber); font-weight:600; }
+.stButton > button[kind="primary"]:hover { background:#f0b45e; color:#2a1a00; }
 
-    st.divider()
+/* selectbox */
+[data-baseweb="select"] > div { background:#021e2c99; border-color:var(--line); border-radius:10px; }
 
-    # ── 2. Language selector (compact) ───────────────────
-    st.markdown("🌐 **Language**")
-    LANGUAGES = {
-        "🇬🇧 English"  : "English",
-        "🇮🇳 Tamil"    : "Tamil",
-        "🇮🇳 Hindi"    : "Hindi",
-        "🇮🇳 Telugu"   : "Telugu",
-        "🇮🇳 Malayalam": "Malayalam",
-        "🇮🇳 Kannada"  : "Kannada",
-        "🇫🇷 French"   : "French",
-        "🇩🇪 German"   : "German",
-        "🇪🇸 Spanish"  : "Spanish",
-        "🇯🇵 Japanese" : "Japanese",
-        "🇨🇳 Chinese"  : "Chinese",
-        "🇦🇪 Arabic"   : "Arabic",
+/* top bar */
+.topbar { display:flex; align-items:center; justify-content:space-between; padding:.2rem 0 1rem;
+  border-bottom:1px solid var(--line); margin-bottom:1.1rem; }
+.top-title { font-family:Georgia,serif; font-size:1.45rem; font-weight:700; color:var(--sand); margin-bottom:.15rem; }
+.topbar span { font-size:.82rem; color:var(--muted); }
+.pill { font-size:.72rem; color:var(--sky); border:1px solid var(--line); border-radius:999px;
+  padding:.18rem .65rem; background:#04374f88; }
+
+/* hero / empty state */
+.hero { text-align:center; padding:2.2rem 0 1.4rem; }
+.hero-title { font-size:2.2rem; font-weight:700; color:var(--sand); margin:0 0 .5rem; }
+.hero-title em { color:var(--amber); font-style:normal; }
+.hero-sub { color:var(--muted); font-size:1rem; max-width:520px; margin:0 auto; line-height:1.55; }
+.steps { display:flex; gap:.7rem; justify-content:center; margin:1.6rem 0 .4rem; flex-wrap:wrap; }
+.step { background:#04374f66; border:1px solid var(--line); border-radius:12px; padding:.7rem .95rem;
+  font-size:.82rem; color:var(--sky); min-width:150px; text-align:left; }
+.step b { display:block; color:var(--amber); font-size:.7rem; letter-spacing:.1em; margin-bottom:.15rem; }
+.try-label { text-align:center; font-size:.72rem; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--muted); margin:1.6rem 0 .6rem; }
+
+/* chat */
+[data-testid="stChatMessage"] { background:#04374f55; border:1px solid var(--line); border-radius:16px;
+  padding:.9rem 1.1rem; margin-bottom:.75rem; }
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
+  background: linear-gradient(135deg, #0a6e9f55, #0a6e9f33); border-color:#2a7da6; }
+[data-testid="stChatMessage"] p, [data-testid="stChatMessage"] li { line-height:1.62; }
+[data-testid="stChatMessageAvatarAssistant"] { background:var(--amber) !important; }
+[data-testid="stChatMessageAvatarUser"] { background:var(--ocean) !important; }
+[data-testid="stCaptionContainer"] { color:var(--muted); }
+
+/* chat input */
+[data-testid="stChatInput"] { border-radius:14px; border:1px solid var(--line); background:var(--deep); }
+[data-testid="stChatInput"]:focus-within { border-color:var(--amber); }
+
+/* notes under answers */
+.note { display:inline-block; font-size:.74rem; color:var(--sky); background:#04374f99;
+  border:1px solid var(--line); border-radius:8px; padding:.15rem .6rem; margin-top:.5rem; }
+.note.warn { color:#f4c986; border-color:#7a5a24; background:#3a2a0f66; }
+
+/* confirm card */
+.confirm { border:1px solid #7a5a24; background:#3a2a0f55; border-radius:14px; padding:.9rem 1.1rem; margin:.2rem 0 .6rem; }
+.confirm b { color:var(--amber); }
+
+/* expander */
+[data-testid="stExpander"] { border:1px solid var(--line); border-radius:12px; background:#021e2c66; }
+hr { border-color: var(--line) !important; }
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+# ══════════════════════════════════════════════════════════
+# Session state
+# ══════════════════════════════════════════════════════════
+ss = st.session_state
+ss.setdefault("session_id", str(uuid.uuid4()))
+ss.setdefault("messages", [])
+ss.setdefault("pending_general_query", None)
+ss.setdefault("queued_prompt", None)
+ss.setdefault("uploaded_names", [])
+
+LANGUAGES = [
+    "English", "Tamil", "Hindi", "Telugu", "Malayalam", "Kannada",
+    "French", "German", "Spanish", "Japanese", "Chinese", "Arabic",
+]
+
+SUGGESTIONS = [
+    "Plan a 5-day trip to Bali",
+    "Best beaches in Thailand",
+    "Hotels in Paris under $150",
+    "Food guide for Tokyo",
+]
+
+
+# ══════════════════════════════════════════════════════════
+# Backend helpers
+# ══════════════════════════════════════════════════════════
+def friendly_error(resp: requests.Response) -> str:
+    """Turn a backend failure into a readable message."""
+    try:
+        detail = resp.json().get("detail", "")
+    except Exception:
+        detail = ""
+    if "model_not_found" in detail or "does not exist" in detail:
+        return "The chat model is not available on this API key. Set a valid model in GROQ_MODEL."
+    if "429" in detail or "rate" in detail.lower():
+        return "The model is rate-limited right now. Please wait a few seconds and try again."
+    return f"The server could not answer this time. {detail[:200]}".strip()
+
+
+def ask_backend(query: str, language: str, use_general: bool = False) -> dict:
+    """Call /ask. Always returns a dict: {ok, answer, rewritten, error}."""
+    try:
+        r = requests.post(
+            f"{FASTAPI_URL}/ask",
+            json={
+                "query": query,
+                "session_id": ss.session_id,
+                "language": language,
+                "use_general": use_general,
+            },
+            timeout=120,
+        )
+    except requests.exceptions.RequestException:
+        return {"ok": False, "error": "Cannot reach the server. If it was idle, give it a minute to wake up and retry."}
+    if r.status_code != 200:
+        return {"ok": False, "error": friendly_error(r)}
+    data = r.json()
+    return {
+        "ok": True,
+        "answer": data.get("response"),
+        "rewritten": data.get("rewritten_query", query),
     }
-    selected_label    = st.selectbox(
-        "lang",
-        options=list(LANGUAGES.keys()),
-        index=0,
-        label_visibility="collapsed"
-    )
-    selected_language = LANGUAGES[selected_label]
-
-    st.divider()
-
-    # ── 3. Action buttons (side by side) ─────────────────
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🗑️ Clear Chat", use_container_width=True):
-            requests.post(
-                f"{FASTAPI_URL}/clear",
-                params={"session_id": st.session_state.session_id}
-            )
-            st.session_state.messages              = []
-            st.session_state.pending_general_query = None
-            st.rerun()
-    with col2:
-        if st.button("🗄️ Clear DB", use_container_width=True):
-            with st.spinner("Clearing..."):
-                try:
-                    r = requests.post(f"{FASTAPI_URL}/clear-db")
-                    if r.status_code == 200:
-                        st.success("✅ Cleared!")
-                    else:
-                        st.error("❌ Failed")
-                except Exception as e:
-                    st.error(f"Error: {str(e)}")
-
-    st.divider()
-
-    # ── 4. Help button → shows popup in main area ─────────
-    if st.button("❓ How to Use", use_container_width=True):
-        st.session_state.show_help = not st.session_state.show_help
-
-    st.divider()
-    st.caption(f"Session: `{st.session_state.session_id[:8]}...`")
 
 
-# ── Help Popup (shown in main area, not sidebar) ──────────
-if st.session_state.show_help:
-    with st.container():
-        st.markdown("""
-<div style="
-    background: linear-gradient(135deg, #1e3a5f, #0d2137);
-    border: 1px solid #4a9eff;
-    border-radius: 16px;
-    padding: 24px 28px;
-    margin-bottom: 20px;
-    color: white;
-">
-
-<h3 style="color:#4a9eff; margin-top:0;">❓ How to Use — AI Travel Assistant</h3>
-
-<hr style="border-color:#4a9eff33; margin: 12px 0;">
-
-<h4 style="color:#7ec8ff;">📄 Uploading PDF Guides</h4>
-<ul style="margin:0 0 12px 0; padding-left:20px;">
-  <li>Click <b>Upload Guides</b> in the sidebar</li>
-  <li>Select one or more PDF travel guides</li>
-  <li>Click <b>⚡ Process Guides</b> to store them</li>
-  <li>Wait for the ✅ success message</li>
-</ul>
-
-<h4 style="color:#7ec8ff;">💬 Asking Questions</h4>
-<ul style="margin:0 0 12px 0; padding-left:20px;">
-  <li>Type your question in the chat box below</li>
-  <li>Ask about trips, hotels, food, beaches, activities</li>
-  <li>Ask follow-ups like <i>"what about food there?"</i> — AI understands context!</li>
-</ul>
-
-<h4 style="color:#7ec8ff;">💾 PDF Memory — Important!</h4>
-<ul style="margin:0 0 12px 0; padding-left:20px;">
-  <li>Once uploaded, your PDF is <b>stored permanently</b> in the database</li>
-  <li>You do <b>NOT</b> need to re-upload next time you open the app</li>
-  <li>Just open the app and ask questions directly!</li>
-  <li>Use <b>🗄️ Clear DB</b> only when you want to remove old PDFs</li>
-  <li>After clearing, re-upload your PDFs fresh</li>
-</ul>
-
-<h4 style="color:#7ec8ff;">🌐 Language</h4>
-<ul style="margin:0 0 12px 0; padding-left:20px;">
-  <li>Select your preferred language from the dropdown</li>
-  <li>Ask in <b>any language</b> — AI answers in your selected language</li>
-</ul>
-
-<h4 style="color:#7ec8ff;">🗑️ Clear Chat vs 🗄️ Clear DB</h4>
-<table style="width:100%; border-collapse:collapse; font-size:13px;">
-  <tr style="background:#ffffff15;">
-    <th style="padding:6px 10px; text-align:left; color:#4a9eff;">Button</th>
-    <th style="padding:6px 10px; text-align:left; color:#4a9eff;">What it does</th>
-    <th style="padding:6px 10px; text-align:left; color:#4a9eff;">PDF data safe?</th>
-  </tr>
-  <tr>
-    <td style="padding:6px 10px;">🗑️ Clear Chat</td>
-    <td style="padding:6px 10px;">Clears chat messages only</td>
-    <td style="padding:6px 10px;">✅ Yes — PDF stays</td>
-  </tr>
-  <tr style="background:#ffffff10;">
-    <td style="padding:6px 10px;">🗄️ Clear DB</td>
-    <td style="padding:6px 10px;">Wipes ALL uploaded PDFs</td>
-    <td style="padding:6px 10px;">❌ No — must re-upload</td>
-  </tr>
-</table>
-
-</div>
-""", unsafe_allow_html=True)
-
-        # Close button
-        if st.button("✖ Close Help", type="primary"):
-            st.session_state.show_help = False
-            st.rerun()
-
-        st.markdown("---")
+def add_assistant(content, **extra):
+    ss.messages.append({"role": "assistant", "content": content, **extra})
 
 
-# ── Chat history ──────────────────────────────────────────
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+def handle_query(prompt: str, language: str, use_general: bool = False, show_user: bool = True):
+    """Run one question end to end and store the result in session state."""
+    if show_user:
+        ss.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
 
-if not st.session_state.messages:
     with st.chat_message("assistant"):
+        with st.spinner("Searching your guides…" if not use_general else "Thinking…"):
+            res = ask_backend(prompt, language, use_general)
+
+    if not res["ok"]:
+        add_assistant(res["error"], error=True)
+    elif res["answer"] is None:
+        ss.pending_general_query = prompt
+        add_assistant(
+            "I couldn't find this in your uploaded guides.",
+            confirm=True,
+        )
+    else:
+        add_assistant(
+            res["answer"],
+            original_query=prompt,
+            rewritten_query=res["rewritten"],
+            general=use_general,
+        )
+    st.rerun()
+
+
+# ══════════════════════════════════════════════════════════
+# Sidebar
+# ══════════════════════════════════════════════════════════
+with st.sidebar:
+    st.markdown(
+        """
+<div class="brand">
+  <div class="brand-mark">🧭</div>
+  <div><div class="brand-title">Travel Assistant</div>
+  <div class="brand-sub">Answers from your own guides</div></div>
+</div>""",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="side-label">Travel guides</div>', unsafe_allow_html=True)
+    uploaded_files = st.file_uploader(
+        "Upload PDF guides", type="pdf", accept_multiple_files=True, label_visibility="collapsed"
+    )
+    if uploaded_files and st.button("Process guides", type="primary", use_container_width=True):
+        for f in uploaded_files:
+            with st.spinner(f"Reading {f.name}…"):
+                try:
+                    r = requests.post(f"{FASTAPI_URL}/upload", files={"file": f}, timeout=300)
+                    msg = r.json().get("message", "") if r.status_code == 200 else ""
+                    if r.status_code == 200 and "success" in msg.lower():
+                        st.success(f.name)
+                        if f.name not in ss.uploaded_names:
+                            ss.uploaded_names.append(f.name)
+                    else:
+                        st.error(f"{f.name}: {msg or 'upload failed'}")
+                except Exception as e:
+                    st.error(f"{f.name}: {e}")
+
+    if ss.uploaded_names:
+        st.caption("In this session: " + ", ".join(ss.uploaded_names))
+
+    st.markdown('<div class="side-label">Reply language</div>', unsafe_allow_html=True)
+    selected_language = st.selectbox("Reply language", LANGUAGES, label_visibility="collapsed")
+
+    st.markdown('<div class="side-label">Session</div>', unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Clear chat", use_container_width=True):
+            try:
+                requests.post(f"{FASTAPI_URL}/clear", params={"session_id": ss.session_id}, timeout=15)
+            except Exception:
+                pass
+            ss.messages = []
+            ss.pending_general_query = None
+            st.rerun()
+    with c2:
+        if st.button("Clear DB", use_container_width=True):
+            try:
+                r = requests.post(f"{FASTAPI_URL}/clear-db", timeout=30)
+                if r.status_code == 200:
+                    ss.uploaded_names = []
+                    st.success("All guides removed")
+                else:
+                    st.error("Could not clear")
+            except Exception as e:
+                st.error(str(e))
+    st.caption("Clear chat keeps your PDFs. Clear DB deletes them.")
+
+    with st.expander("How to use"):
         st.markdown(
-            "👋 Hello! I'm your AI Travel Assistant. "
-            "Upload travel guide PDFs, then ask me anything — "
-            "even follow-ups like *'what about food there?'* and I'll figure out where you mean! "
-            "Click **❓ How to Use** in the sidebar for full guide."
+            """
+1. Upload one or more PDF guides and press **Process guides**.
+2. Pick a reply language.
+3. Ask a question, then follow-ups like *what about food there?*
+
+Guides stay stored after you close the app, so you only upload once.
+Use **Clear DB** to start over with new guides.
+"""
         )
 
-# ── Display chat history ──────────────────────────────────
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-        if message["role"] == "assistant" and message.get("rewritten_query"):
-            original  = message.get("original_query", "")
-            rewritten = message["rewritten_query"]
-            if rewritten.lower().strip() != original.lower().strip():
-                st.caption(f"🔍 Searched as: \"{rewritten}\"")
+    st.caption(f"Session `{ss.session_id[:8]}`")
 
 
-# ── Chat input ────────────────────────────────────────────
-if prompt := st.chat_input("Ask about any destination..."):
+# ══════════════════════════════════════════════════════════
+# Main area
+# ══════════════════════════════════════════════════════════
+st.markdown(
+    """
+<div class="topbar">
+  <div><div class="top-title">Travel Itinerary Assistant</div>
+  <span>Ask about any destination. Upload guides for deeper answers.</span></div>
+  <div class="pill">Grounded in your PDFs</div>
+</div>""",
+    unsafe_allow_html=True,
+)
 
-    # ══ CASE 1: Waiting for YES / NO ═════════════════════
-    if st.session_state.pending_general_query is not None:
+# ── Empty state ───────────────────────────────────────────
+if not ss.messages:
+    st.markdown(
+        """
+<div class="hero">
+  <div class="hero-title">Where do you want to <em>go</em>?</div>
+  <div class="hero-sub">Upload your travel guides and get itineraries, hotels and food tips
+  taken straight from them, in the language you choose.</div>
+  <div class="steps">
+    <div class="step"><b>1 · UPLOAD</b>Add PDF travel guides</div>
+    <div class="step"><b>2 · ASK</b>Type a question or follow-up</div>
+    <div class="step"><b>3 · TRAVEL</b>Get answers from your guides</div>
+  </div>
+  <div class="try-label">Try asking</div>
+</div>""",
+        unsafe_allow_html=True,
+    )
+    cols = st.columns(2)
+    for i, text in enumerate(SUGGESTIONS):
+        if cols[i % 2].button(text, key=f"sugg{i}", use_container_width=True):
+            ss.queued_prompt = text
+            st.rerun()
 
-        original_query = st.session_state.pending_general_query
-        user_reply     = prompt.strip().lower()
-
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        st.session_state.messages.append({"role": "user", "content": prompt})
-
-        st.session_state.pending_general_query = None
-
-        YES_WORDS = {
-            "yes", "yeah", "sure", "ok", "okay", "yep", "please", "y",
-            "是的", "是", "好的", "好", "要", "对", "行",
-            "ஆம்", "ஆமா", "சரி", "ஓகே", "ஆமாம்",
-            "हाँ", "हां", "हा", "जी", "जी हाँ", "ठीक है",
-            "అవును", "సరే", "అవు",
-            "അതെ", "ശരി", "ഓക്കേ",
-            "ಹೌದು", "ಸರಿ", "ಓಕೆ",
-            "oui", "ouais", "bien sûr",
-            "ja", "jawohl", "natürlich",
-            "sí", "si", "claro", "bueno",
-            "はい", "うん", "そうです",
-            "نعم", "أجل", "تمام", "موافق",
-        }
-        user_said_yes = any(w in user_reply for w in YES_WORDS)
-
-        if user_said_yes:
-            with st.chat_message("assistant"):
-                with st.spinner("Answering from general knowledge..."):
-                    try:
-                        response = requests.post(
-                            f"{FASTAPI_URL}/ask",
-                            json={
-                                "query":       original_query,
-                                "session_id":  st.session_state.session_id,
-                                "use_general": True,
-                                "language":    selected_language
-                            }
-                        )
-                        if response.status_code == 200:
-                            data            = response.json()
-                            answer          = data["response"]
-                            rewritten_query = data.get("rewritten_query", original_query)
-                            st.markdown(answer)
-                            st.caption("ℹ️ Answered from general knowledge — upload a PDF for guide-based answers.")
-                            if rewritten_query.lower().strip() != original_query.lower().strip():
-                                st.caption(f"🔍 Searched as: \"{rewritten_query}\"")
-                            st.session_state.messages.append({
-                                "role":            "assistant",
-                                "content":         answer,
-                                "rewritten_query": rewritten_query,
-                                "original_query":  original_query
-                            })
-                        else:
-                            err = "⚠️ Server error. Please try again."
-                            st.error(err)
-                            st.session_state.messages.append({"role": "assistant", "content": err})
-                    except Exception as e:
-                        err = f"⚠️ Could not reach the server: {e}"
-                        st.error(err)
-                        st.session_state.messages.append({"role": "assistant", "content": err})
+# ── Conversation ──────────────────────────────────────────
+last_index = len(ss.messages) - 1
+for idx, m in enumerate(ss.messages):
+    with st.chat_message(m["role"]):
+        if m.get("error"):
+            st.markdown(f'<div class="confirm"><b>Something went wrong.</b><br>{m["content"]}</div>', unsafe_allow_html=True)
+        elif m.get("confirm"):
+            st.markdown(
+                f'<div class="confirm"><b>Not found in your guides.</b><br>'
+                f"Do you want me to answer from general travel knowledge instead?</div>",
+                unsafe_allow_html=True,
+            )
         else:
-            no_msg = "No problem! Upload a PDF travel guide for this destination and I'll give you a detailed answer from it."
-            with st.chat_message("assistant"):
-                st.markdown(no_msg)
-            st.session_state.messages.append({"role": "assistant", "content": no_msg})
+            st.markdown(m["content"])
+            if m["role"] == "assistant":
+                if m.get("general"):
+                    st.markdown('<span class="note warn">General knowledge, not from your guides</span>', unsafe_allow_html=True)
+                rq, oq = m.get("rewritten_query"), m.get("original_query", "")
+                if rq and rq.lower().strip() != oq.lower().strip():
+                    st.markdown(f'<span class="note">Searched as: {rq}</span>', unsafe_allow_html=True)
 
-    # ══ CASE 2: Normal fresh query ════════════════════════
-    else:
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        st.session_state.messages.append({"role": "user", "content": prompt})
+# ── Yes / No for general knowledge ────────────────────────
+if ss.pending_general_query is not None:
+    b1, b2, _ = st.columns([1.3, 1, 2])
+    if b1.button("Yes, use general knowledge", type="primary", key="gen_yes"):
+        q = ss.pending_general_query
+        ss.pending_general_query = None
+        handle_query(q, selected_language, use_general=True, show_user=False)
+    if b2.button("No thanks", key="gen_no"):
+        ss.pending_general_query = None
+        add_assistant("No problem. Upload a PDF guide for this destination and I'll answer from it.")
+        st.rerun()
 
-        with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                try:
-                    response = requests.post(
-                        f"{FASTAPI_URL}/ask",
-                        json={
-                            "query":      prompt,
-                            "session_id": st.session_state.session_id,
-                            "language":   selected_language
-                        }
-                    )
-                    if response.status_code == 200:
-                        data            = response.json()
-                        answer          = data["response"]
-                        rewritten_query = data.get("rewritten_query", prompt)
-
-                        if answer is None:
-                            confirm_msg = (
-                                "I don't have a PDF travel guide for this destination.\n\n"
-                                "Would you like me to answer based on my **general knowledge**? *(yes / no)*\n\n"
-                                "⚠️ Please respond only with yes or no so I can continue."
-                            )
-                            st.markdown(confirm_msg)
-                            st.session_state.messages.append({
-                                "role":    "assistant",
-                                "content": confirm_msg
-                            })
-                            st.session_state.pending_general_query = prompt
-                        else:
-                            st.markdown(answer)
-                            if rewritten_query.lower().strip() != prompt.lower().strip():
-                                st.caption(f"🔍 Searched as: \"{rewritten_query}\"")
-                            st.session_state.messages.append({
-                                "role":            "assistant",
-                                "content":         answer,
-                                "rewritten_query": rewritten_query,
-                                "original_query":  prompt
-                            })
-                    else:
-                        err = "⚠️ Server error. Please try again."
-                        st.error(err)
-                        st.session_state.messages.append({"role": "assistant", "content": err})
-                except Exception as e:
-                    err = f"⚠️ Could not reach the server: {e}"
-                    st.error(err)
-                    st.session_state.messages.append({"role": "assistant", "content": err})
+# ── Input ─────────────────────────────────────────────────
+typed = st.chat_input("Ask about any destination…")
+prompt = typed or ss.queued_prompt
+ss.queued_prompt = None
+if prompt:
+    ss.pending_general_query = None  # a new question replaces any open yes/no
+    handle_query(prompt, selected_language)
