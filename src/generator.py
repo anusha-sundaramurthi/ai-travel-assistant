@@ -11,14 +11,18 @@ from src.config import (
 )
 
 
-# ── 1. Build the LLM (Groq Llama by default, OpenAI optional) ─
+# ── 1. Build the LLM (Groq by default, OpenAI optional) ───
 def build_llm(temperature: float):
     if MODEL_PROVIDER == "groq":
         from langchain_groq import ChatGroq
+        kwargs = {}
+        if GROQ_MODEL.startswith("openai/gpt-oss"):
+            kwargs["reasoning_effort"] = "low"   # faster replies, no long hidden reasoning
         return ChatGroq(
             api_key=GROQ_API_KEY,
-            model=GROQ_MODEL,            # llama-3.3-70b-versatile
+            model=GROQ_MODEL,
             temperature=temperature,
+            **kwargs,
         )
     if MODEL_PROVIDER == "openai":
         from langchain_openai import ChatOpenAI
